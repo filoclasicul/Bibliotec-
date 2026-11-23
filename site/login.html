@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autentificare administrator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      display: grid;
+      min-height: 100vh;
+      place-items: center;
+      margin: 0;
+      padding: 20px;
+      color: #202833;
+      background: #f4f6f8;
+      font: 16px Arial, sans-serif;
+    }
+    main {
+      width: min(420px, 100%);
+      padding: 28px;
+      background: #fff;
+      border: 1px solid #d7dee7;
+      border-radius: 10px;
+    }
+    h1 { margin-top: 0; color: #1f4e78; }
+    form { display: grid; gap: 14px; }
+    label { display: grid; gap: 6px; font-weight: bold; }
+    input, button {
+      padding: 11px;
+      border: 1px solid #d7dee7;
+      border-radius: 5px;
+      font: inherit;
+    }
+    button { color: white; background: #1f4e78; cursor: pointer; }
+    button:disabled { opacity: .65; cursor: wait; }
+    #error { min-height: 20px; color: #a12622; }
+    a { color: #1f4e78; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Autentificare administrator</h1>
+    <form id="loginForm">
+      <label>E-mail
+        <input id="email" name="email" type="email" autocomplete="email" required>
+      </label>
+      <label>Parolă
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button id="submitButton" type="submit">Conectare</button>
+    </form>
+    <p id="error" role="alert" aria-live="polite"></p>
+    <a href="/catalog">Înapoi la catalogul public</a>
+  </main>
+  <script>
+    const form = document.getElementById("loginForm");
+    const errorEl = document.getElementById("error");
+    const submitButton = document.getElementById("submitButton");
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      errorEl.textContent = "";
+      submitButton.disabled = true;
+      try {
+        const response = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("email").value,
+            password: document.getElementById("password").value
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Autentificarea a eșuat.");
+        sessionStorage.setItem("csrfToken", data.csrf_token);
+        window.location.assign("/admin");
+      } catch (error) {
+        errorEl.textContent = error.message;
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

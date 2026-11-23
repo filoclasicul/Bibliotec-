@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administrare catalog bibliotecă</title>
+  <style>
+    :root {
+      --accent: #1f4e78;
+      --bg: #f4f6f8;
+      --border: #d7dee7;
+      --text: #202833;
+      --muted: #5c6675;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      color: var(--text);
+      background: var(--bg);
+      font: 15px Arial, sans-serif;
+    }
+    main { max-width: 1250px; margin: auto; }
+    header, section {
+      margin-bottom: 18px;
+      padding: 20px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+    }
+    h1, h2 { margin-top: 0; color: var(--accent); }
+    h1 { margin-bottom: 8px; }
+    .hint, #status { color: var(--muted); }
+    .top-links { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; }
+    a { color: var(--accent); }
+    form {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    label { display: grid; gap: 5px; font-weight: bold; }
+    label.wide { grid-column: span 2; }
+    input, textarea, button {
+      font: inherit;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 9px 10px;
+    }
+    textarea { min-height: 42px; resize: vertical; }
+    .form-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+    button { cursor: pointer; background: #fff; }
+    button.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+    button:disabled { cursor: wait; opacity: .65; }
+    #status { min-height: 20px; margin: 12px 0 0; }
+    .list-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .list-head h2 { margin: 0; }
+    #search { width: min(420px, 100%); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th, td { padding: 9px; border-bottom: 1px solid var(--border); text-align: left; }
+    th { position: sticky; top: 0; color: #fff; background: var(--accent); }
+    td.title { min-width: 240px; }
+    td.action { white-space: nowrap; }
+    @media (max-width: 760px) {
+      body { padding: 12px; }
+      form { grid-template-columns: 1fr 1fr; }
+      label.wide { grid-column: span 2; }
+      .list-head { align-items: stretch; flex-direction: column; }
+    }
+    @media (max-width: 460px) {
+      form { grid-template-columns: 1fr; }
+      label.wide { grid-column: auto; }
+      .form-actions { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Administrare catalog bibliotecă</h1>
+      <div class="hint">Adaugă cărți noi sau modifică datele existente. Salvările se scriu în registrul Excel.</div>
+      <div class="top-links">
+        <a href="/catalog">Deschide catalogul public</a>
+        <button id="logoutButton" type="button">Deconectare</button>
+      </div>
+    </header>
+
+    <section>
+      <h2>Organizare rafturi</h2>
+      <p class="hint">Generează planul de așezare folosind registrul actual și descarcă rezultatul Excel.</p>
+      <button id="generateShelvesButton" class="primary" type="button">Generează planul de rafturi</button>
+      <a id="downloadShelvesLink" href="/api/rafturi/plan" hidden>Descarcă planul Excel</a>
+    </section>
+
+    <section>
+      <h2 id="formTitle">Adaugă o carte</h2>
+      <form id="bookForm">
+        <input id="rowIndex" type="hidden">
+        <label class="wide">Titlu *
+          <input id="titlu" name="titlu" required maxlength="1000">
+        </label>
+        <label>Autor / Coordonator
+          <input id="autor" name="autor">
+        </label>
+        <label>Editură
+          <input id="editura" name="editura">
+        </label>
+        <label>An / Ediție
+          <input id="an" name="an">
+        </label>
+        <label>Raft
+          <input id="raft" name="raft">
+        </label>
+        <label>Număr exemplare
+          <input id="exemplare" name="exemplare" type="number" min="1" step="1" value="1" required>
+        </label>
+        <label class="wide">Observații
+          <textarea id="observatii" name="observatii"></textarea>
+        </label>
+        <div class="form-actions">
+          <button id="saveButton" class="primary" type="submit">Adaugă cartea</button>
+          <button id="cancelButton" type="button" hidden>Anulează editarea</button>
+        </div>
+      </form>
+      <p id="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section>
+      <div class="list-head">
+        <h2>Cărți în catalog</h2>
+        <input id="search" type="search" placeholder="Caută după cod, titlu, autor sau raft">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Inventar</th>
+              <th>Titlu</th>
+              <th>Autor</th>
+              <th>Editură</th>
+              <th>An</th>
+              <th>Raft</th>
+              <th>Ex.</th>
+              <th>Acțiune</th>
+            </tr>
+          </thead>
+          <tbody id="books"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("bookForm");
+    const booksBody = document.getElementById("books");
+    const searchInput = document.getElementById("search");
+    const statusEl = document.getElementById("status");
+    const saveButton = document.getElementById("saveButton");
+    const cancelButton = document.getElementById("cancelButton");
+    const generateShelvesButton = document.getElementById("generateShelvesButton");
+    const downloadShelvesLink = document.getElementById("downloadShelvesLink");
+    let books = [];
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.style.color = isError ? "#a12622" : "";
+    }
+
+    async function requestJson(url, options = {}) {
+      const requestOptions = { ...options, headers: { ...(options.headers || {}) } };
+      if (["POST", "PUT", "DELETE"].includes(requestOptions.method)) {
+        requestOptions.headers["X-CSRF-Token"] = sessionStorage.getItem("csrfToken") || "";
+      }
+      const response = await fetch(url, requestOptions);
+      const data = await response.json();
+      if (response.status === 401) {
+        sessionStorage.removeItem("csrfToken");
+        window.location.assign("/login");
+        throw new Error(data.error || "Sesiunea a expirat.");
+      }
+      if (!response.ok) throw new Error(data.error || "Cererea nu a putut fi finalizată.");
+      return data;
+    }
+
+    function renderBooks() {
+      const query = searchInput.value.trim().toLocaleLowerCase("ro");
+      const fragment = document.createDocumentFragment();
+      const visibleBooks = books.filter(book =>
+        [book.nr_inv, book.titlu, book.autor, book.editura, book.an, book.raft]
+          .join(" ")
+          .toLocaleLowerCase("ro")
+          .includes(query)
+      );
+
+      for (const book of visibleBooks) {
+        const row = document.createElement("tr");
+        const values = [
+          book.nr_inv, book.titlu, book.autor, book.editura,
+          book.an, book.raft, book.exemplare
+        ];
+        values.forEach((value, index) => {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          if (index === 1) cell.className = "title";
+          row.append(cell);
+        });
+        const actionCell = document.createElement("td");
+        actionCell.className = "action";
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.textContent = "Editează";
+        editButton.addEventListener("click", () => incepeEditarea(book));
+        actionCell.append(editButton);
+        row.append(actionCell);
+        fragment.append(row);
+      }
+
+      if (visibleBooks.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 8;
+        cell.textContent = "Nu s-au găsit cărți.";
+        row.append(cell);
+        fragment.append(row);
+      }
+      booksBody.replaceChildren(fragment);
+    }
+
+    async function incarcaCartile() {
+      try {
+        books = await requestJson("/api/carti");
+        renderBooks();
+        setStatus(`${books.length} intrări încărcate.`);
+      } catch (error) {
+        setStatus(`Nu s-au putut încărca datele: ${error.message}`, true);
+      }
+    }
+
+    function incepeEditarea(book) {
+      document.getElementById("rowIndex").value = book.row_index;
+      for (const field of ["titlu", "autor", "editura", "an", "raft", "exemplare", "observatii"]) {
+        document.getElementById(field).value = book[field] === "-" ? "" : book[field];
+      }
+      document.getElementById("formTitle").textContent = `Editează ${book.nr_inv}`;
+      saveButton.textContent = "Salvează modificările";
+      cancelButton.hidden = false;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function reseteazaFormularul() {
+      form.reset();
+      document.getElementById("rowIndex").value = "";
+      document.getElementById("formTitle").textContent = "Adaugă o carte";
+      saveButton.textContent = "Adaugă cartea";
+      cancelButton.hidden = true;
+    }
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const rowIndex = document.getElementById("rowIndex").value;
+      const payload = Object.fromEntries(new FormData(form).entries());
+      delete payload.rowIndex;
+      saveButton.disabled = true;
+      setStatus("Se salvează...");
+
+      try {
+        const result = await requestJson(
+          rowIndex === "" ? "/api/carti" : `/api/carti/${rowIndex}`,
+          {
+            method: rowIndex === "" ? "POST" : "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }
+        );
+        reseteazaFormularul();
+        await incarcaCartile();
+        setStatus(`${result.message} Cod inventar: ${result.nr_inv}`);
+      } catch (error) {
+        setStatus(`Nu s-a putut salva: ${error.message}`, true);
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+
+    cancelButton.addEventListener("click", reseteazaFormularul);
+    generateShelvesButton.addEventListener("click", async () => {
+      generateShelvesButton.disabled = true;
+      downloadShelvesLink.hidden = true;
+      setStatus("Se generează planul de rafturi...");
+      try {
+        const result = await requestJson("/api/rafturi", { method: "POST" });
+        downloadShelvesLink.href = result.download_url;
+        downloadShelvesLink.hidden = false;
+        setStatus(result.message);
+      } catch (error) {
+        setStatus(`Nu s-a putut genera planul: ${error.message}`, true);
+      } finally {
+        generateShelvesButton.disabled = false;
+      }
+    });
+    document.getElementById("logoutButton").addEventListener("click", async () => {
+      try {
+        await requestJson("/api/logout", { method: "POST" });
+      } catch (error) {
+        setStatus(`Deconectarea nu a reușit: ${error.message}`, true);
+        return;
+      }
+      sessionStorage.removeItem("csrfToken");
+      window.location.assign("/catalog");
+    });
+    searchInput.addEventListener("input", renderBooks);
+    incarcaCartile();
+  </script>
+</body>
+</html>
