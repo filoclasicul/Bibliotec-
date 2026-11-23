@@ -10,7 +10,7 @@ from werkzeug.security import check_password_hash
 
 PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
 DATA_DIRECTORY = PROJECT_DIRECTORY / "data"
-SITE_DIRECTORY = PROJECT_DIRECTORY / "site"
+SITE_DIRECTORY = PROJECT_DIRECTORY
 CSV_FILE = DATA_DIRECTORY / "inventar.csv"
 STATE_FILE = DATA_DIRECTORY / "biblioteca_stare.json"
 ADMIN_CONFIG_FILE = Path.home() / ".biblioteca_admin.json"
@@ -179,6 +179,9 @@ class BibliotecaHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        if parsed.path not in ("/", "/biblioteca.html"):
+            self.send_error(404)
+            return
         if parsed.path == "/":
             self.path = "/biblioteca.html"
         return super().do_GET()

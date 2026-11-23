@@ -109,7 +109,7 @@
   <div class="container">
     <div class="topbar">
       <h1>Catalog Bibliotecă</h1>
-      <a class="admin-link" href="http://127.0.0.1:5000/admin">Intră ca administrator</a>
+      <a class="admin-link" href="/admin" hidden>Intră ca administrator</a>
     </div>
 
     <div class="controls">
@@ -135,7 +135,10 @@
     fetch("/api/session")
       .then(res => res.ok ? res.json() : null)
       .then(data => {
-        if (data && data.authenticated) adminLink.textContent = "Panou administrator";
+        if (data && data.admin_available) {
+          adminLink.hidden = false;
+          if (data.authenticated) adminLink.textContent = "Panou administrator";
+        }
       })
       .catch(error => console.error("Nu pot verifica disponibilitatea administrării.", error));
 
@@ -221,7 +224,7 @@
       randeaza(filtrate);
     }
 
-    const sursaDate = window.location.port === "5000" ? "/api/carti" : "../data/carti.json";
+    const sursaDate = window.location.port === "5000" ? "/api/carti" : "data/carti.json";
 
     fetch(sursaDate)
       .then(res => {

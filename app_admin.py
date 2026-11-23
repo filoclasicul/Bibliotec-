@@ -16,7 +16,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 DIRECTORY = Path(__file__).resolve().parent
 DATA_DIRECTORY = DIRECTORY / "data"
-SITE_DIRECTORY = DIRECTORY / "site"
+SITE_DIRECTORY = DIRECTORY
 EXCEL_FILE = DATA_DIRECTORY / "Inventar_Biblioteci_Compilat.xlsx"
 SHELF_PLAN_FILE = DATA_DIRECTORY / "Inventar_Biblioteca_Organizat_Pe_Rafturi.xlsx"
 SHEET_NAME = "Inventar Reunit"
