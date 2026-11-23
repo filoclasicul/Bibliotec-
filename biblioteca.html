@@ -109,11 +109,11 @@
   <div class="container">
     <div class="topbar">
       <h1>Catalog Bibliotecă</h1>
-      <a class="admin-link" href="/admin" hidden>Intră ca administrator</a>
+      <a class="admin-link" href="/admin">Intră ca administrator</a>
     </div>
 
     <div class="controls">
-      <input id="searchInput" type="text" placeholder="Caută după titlu, autor, an, raft sau cod (ex: INV-0015, Cicero, 1987)..." />
+      <input id="searchInput" type="text" placeholder="Caută după titlu sau autor..." />
       <select id="sectionSelect">
         <option value="ALL">Toate secțiunile</option>
       </select>
@@ -131,16 +131,28 @@
     const statsEl = document.getElementById("stats");
     const resultsEl = document.getElementById("results");
     const adminLink = document.querySelector(".admin-link");
-
-    fetch("/api/session")
+    const verificareAdmin = fetch("/api/session")
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && data.admin_available) {
-          adminLink.hidden = false;
           if (data.authenticated) adminLink.textContent = "Panou administrator";
+          return true;
         }
+        return false;
       })
-      .catch(error => console.error("Nu pot verifica disponibilitatea administrării.", error));
+      .catch(error => {
+        console.error("Nu pot verifica disponibilitatea administrării.", error);
+        return false;
+      });
+
+    adminLink.addEventListener("click", async event => {
+      event.preventDefault();
+      if (await verificareAdmin) {
+        window.location.assign(adminLink.href);
+      } else {
+        alert("Administrarea nu este disponibilă pe acest site static. Pornește aplicația locală și deschide http://127.0.0.1:5000 pentru a te conecta.");
+      }
+    });
 
     function normalizeaza(str) {
       return (str || "")
@@ -210,14 +222,17 @@
       const q = normalizeaza(searchInput.value.trim());
       const sec = sectionSelect.value;
 
+      if (!q) {
+        statsEl.textContent = "Introdu un titlu sau un autor pentru a căuta în catalog.";
+        resultsEl.replaceChildren();
+        return;
+      }
+
       const filtrate = toateCartile.filter(c => {
         const potrivesteSectiune = (sec === "ALL") || (c.sectiune === sec);
         if (!potrivesteSectiune) return false;
-        if (!q) return true;
 
-        const textCautabil = normalizeaza(
-          `${c.nr_inv} ${c.titlu} ${c.autor} ${c.editura} ${c.an} ${c.raft} ${c.observatii}`
-        );
+        const textCautabil = normalizeaza(`${c.titlu} ${c.autor}`);
         return textCautabil.includes(q);
       });
 
@@ -236,7 +251,7 @@
         if (!Array.isArray(carti)) throw new Error("Formatul datelor catalogului nu este valid.");
         toateCartile = carti;
         populeazaSectiuni(toateCartile);
-        randeaza(toateCartile);
+        filtreaza();
       })
       .catch(err => {
         statsEl.textContent = `Eroare la încărcarea catalogului: ${err.message}. Pornește un server local (ex: python -m http.server) în folderul site-ului.`;
