@@ -225,7 +225,10 @@
         filtreaza();
       })
       .catch(err => {
-        statsEl.textContent = `Eroare la încărcarea catalogului: ${err.message}. Pornește Porneste_Biblioteca.cmd și deschide http://127.0.0.1:5000 în locul previzualizării HTML.`;
+        const sugestie = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+          ? "Pornește Porneste_Biblioteca.cmd și deschide http://127.0.0.1:5000."
+          : "Verifică că fișierul data/carti.json este inclus în directorul publicat.";
+        statsEl.textContent = `Eroare la încărcarea catalogului: ${err.message}. ${sugestie}`;
         console.error(err);
       });
 

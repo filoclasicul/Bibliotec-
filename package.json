@@ -1,0 +1,7 @@
+{
+  "name": "catalog-biblioteca",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build_site.cjs"
+  }
+}
