@@ -67,6 +67,9 @@
     th { position: sticky; top: 0; color: #fff; background: var(--accent); }
     td.title { min-width: 240px; }
     td.action { white-space: nowrap; }
+    td input, td textarea { width: 140px; }
+    td.title input { width: 240px; }
+    .row-status { color: #a12622; white-space: normal; min-width: 180px; }
     @media (max-width: 760px) {
       body { padding: 12px; }
       form { grid-template-columns: 1fr 1fr; }
@@ -84,7 +87,7 @@
   <main>
     <header>
       <h1>Administrare catalog bibliotecă</h1>
-      <div class="hint">Adaugă cărți noi sau modifică datele existente. Salvările se scriu în registrul Excel.</div>
+      <div class="hint">Deschide această pagină prin aplicația locală, nu prin previzualizarea HTML din VS Code. Salvările actualizează data/Inventar_Biblioteci_Compilat.xlsx.</div>
       <div class="top-links">
         <a href="/catalog">Deschide catalogul public</a>
         <button id="logoutButton" type="button">Deconectare</button>
@@ -99,9 +102,8 @@
     </section>
 
     <section>
-      <h2 id="formTitle">Adaugă o carte</h2>
+      <h2>Adaugă o carte</h2>
       <form id="bookForm">
-        <input id="rowIndex" type="hidden">
         <label class="wide">Titlu *
           <input id="titlu" name="titlu" required maxlength="1000">
         </label>
@@ -125,7 +127,6 @@
         </label>
         <div class="form-actions">
           <button id="saveButton" class="primary" type="submit">Adaugă cartea</button>
-          <button id="cancelButton" type="button" hidden>Anulează editarea</button>
         </div>
       </form>
       <p id="status" role="status" aria-live="polite"></p>
@@ -136,6 +137,7 @@
         <h2>Cărți în catalog</h2>
         <input id="search" type="search" placeholder="Caută după cod, titlu, autor sau raft">
       </div>
+      <p class="hint">Apasă „Editează” lângă o carte, modifică direct în tabel și apoi apasă „Salvează”.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -147,6 +149,7 @@
               <th>An</th>
               <th>Raft</th>
               <th>Ex.</th>
+              <th>Observații</th>
               <th>Acțiune</th>
             </tr>
           </thead>
@@ -162,10 +165,15 @@
     const searchInput = document.getElementById("search");
     const statusEl = document.getElementById("status");
     const saveButton = document.getElementById("saveButton");
-    const cancelButton = document.getElementById("cancelButton");
     const generateShelvesButton = document.getElementById("generateShelvesButton");
     const downloadShelvesLink = document.getElementById("downloadShelvesLink");
     let books = [];
+    let editingIndex = null;
+    const fields = [
+      ["titlu", "Titlu"], ["autor", "Autor"], ["editura", "Editură"],
+      ["an", "An"], ["raft", "Raft"], ["exemplare", "Exemplare"],
+      ["observatii", "Observații"]
+    ];
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message;
@@ -178,6 +186,10 @@
         requestOptions.headers["X-CSRF-Token"] = sessionStorage.getItem("csrfToken") || "";
       }
       const response = await fetch(url, requestOptions);
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(`Răspuns neașteptat (HTTP ${response.status}). Pornește Porneste_Biblioteca.cmd și deschide http://127.0.0.1:5000/admin, nu previzualizarea HTML.`);
+      }
       const data = await response.json();
       if (response.status === 401) {
         sessionStorage.removeItem("csrfToken");
@@ -192,7 +204,10 @@
       const query = searchInput.value.trim().toLocaleLowerCase("ro");
       const fragment = document.createDocumentFragment();
       const visibleBooks = books.filter(book =>
-        [book.nr_inv, book.titlu, book.autor, book.editura, book.an, book.raft]
+        [
+          book.nr_inv, book.titlu, book.autor, book.editura,
+          book.an, book.raft, book.exemplare, book.observatii
+        ]
           .join(" ")
           .toLocaleLowerCase("ro")
           .includes(query)
@@ -200,23 +215,98 @@
 
       for (const book of visibleBooks) {
         const row = document.createElement("tr");
-        const values = [
-          book.nr_inv, book.titlu, book.autor, book.editura,
-          book.an, book.raft, book.exemplare
-        ];
-        values.forEach((value, index) => {
+        const inventoryCell = document.createElement("td");
+        inventoryCell.textContent = book.nr_inv;
+        row.append(inventoryCell);
+        const inputs = {};
+        fields.forEach(([field, label]) => {
           const cell = document.createElement("td");
-          cell.textContent = value;
-          if (index === 1) cell.className = "title";
+          if (field === "titlu") cell.className = "title";
+          if (editingIndex === book.row_index) {
+            const input = document.createElement(field === "observatii" ? "textarea" : "input");
+            input.value = book[field] === "-" ? "" : book[field];
+            input.setAttribute("aria-label", `${label} pentru ${book.nr_inv}`);
+            if (field === "titlu") {
+              input.required = true;
+              input.maxLength = 1000;
+            }
+            if (field === "exemplare") {
+              input.type = "number";
+              input.min = "1";
+              input.step = "1";
+              input.required = true;
+            }
+            inputs[field] = input;
+            cell.append(input);
+          } else {
+            cell.textContent = book[field];
+          }
           row.append(cell);
         });
         const actionCell = document.createElement("td");
         actionCell.className = "action";
-        const editButton = document.createElement("button");
-        editButton.type = "button";
-        editButton.textContent = "Editează";
-        editButton.addEventListener("click", () => incepeEditarea(book));
-        actionCell.append(editButton);
+        if (editingIndex === book.row_index) {
+          const save = document.createElement("button");
+          save.type = "button";
+          save.className = "primary";
+          save.textContent = "Salvează";
+          const cancel = document.createElement("button");
+          cancel.type = "button";
+          cancel.textContent = "Anulează";
+          const rowStatus = document.createElement("p");
+          rowStatus.className = "row-status";
+          rowStatus.setAttribute("role", "status");
+          cancel.addEventListener("click", () => terminaEditarea());
+          save.addEventListener("click", async () => {
+            for (const input of Object.values(inputs)) {
+              if (!input.reportValidity()) return;
+            }
+            const payload = Object.fromEntries(
+              Object.entries(inputs).map(([field, input]) => [field, input.value])
+            );
+            save.disabled = true;
+            cancel.disabled = true;
+            rowStatus.textContent = "Se salvează...";
+            let result;
+            try {
+              result = await requestJson(`/api/carti/${book.row_index}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+              });
+            } catch (error) {
+              rowStatus.textContent = `Nu s-a putut salva: ${error.message}`;
+              save.disabled = false;
+              cancel.disabled = false;
+              return;
+            }
+            try {
+              await incarcaCartile();
+              editingIndex = null;
+              searchInput.disabled = false;
+              saveButton.disabled = false;
+              renderBooks();
+              setStatus(`${result.message} Cod inventar: ${result.nr_inv}`);
+            } catch (error) {
+              rowStatus.textContent = `Modificările au fost salvate, dar lista nu a putut fi reîncărcată: ${error.message}. Reîncarcă pagina.`;
+            } finally {
+              cancel.disabled = false;
+            }
+          });
+          actionCell.append(save, cancel, rowStatus);
+        } else {
+          const editButton = document.createElement("button");
+          editButton.type = "button";
+          editButton.textContent = "Editează";
+          editButton.disabled = editingIndex !== null;
+          editButton.addEventListener("click", () => {
+            editingIndex = book.row_index;
+            searchInput.disabled = true;
+            saveButton.disabled = true;
+            renderBooks();
+          });
+          actionCell.append(editButton);
+        }
         row.append(actionCell);
         fragment.append(row);
       }
@@ -224,7 +314,7 @@
       if (visibleBooks.length === 0) {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
-        cell.colSpan = 8;
+        cell.colSpan = 9;
         cell.textContent = "Nu s-au găsit cărți.";
         row.append(cell);
         fragment.append(row);
@@ -233,62 +323,50 @@
     }
 
     async function incarcaCartile() {
-      try {
-        books = await requestJson("/api/carti");
-        renderBooks();
-        setStatus(`${books.length} intrări încărcate.`);
-      } catch (error) {
-        setStatus(`Nu s-au putut încărca datele: ${error.message}`, true);
-      }
+      books = await requestJson("/api/carti");
+      renderBooks();
+      setStatus(`${books.length} intrări încărcate.`);
     }
 
-    function incepeEditarea(book) {
-      document.getElementById("rowIndex").value = book.row_index;
-      for (const field of ["titlu", "autor", "editura", "an", "raft", "exemplare", "observatii"]) {
-        document.getElementById(field).value = book[field] === "-" ? "" : book[field];
-      }
-      document.getElementById("formTitle").textContent = `Editează ${book.nr_inv}`;
-      saveButton.textContent = "Salvează modificările";
-      cancelButton.hidden = false;
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-
-    function reseteazaFormularul() {
-      form.reset();
-      document.getElementById("rowIndex").value = "";
-      document.getElementById("formTitle").textContent = "Adaugă o carte";
-      saveButton.textContent = "Adaugă cartea";
-      cancelButton.hidden = true;
+    function terminaEditarea() {
+      editingIndex = null;
+      searchInput.disabled = false;
+      saveButton.disabled = false;
+      renderBooks();
     }
 
     form.addEventListener("submit", async event => {
       event.preventDefault();
-      const rowIndex = document.getElementById("rowIndex").value;
       const payload = Object.fromEntries(new FormData(form).entries());
-      delete payload.rowIndex;
       saveButton.disabled = true;
       setStatus("Se salvează...");
 
+      let result;
       try {
-        const result = await requestJson(
-          rowIndex === "" ? "/api/carti" : `/api/carti/${rowIndex}`,
+        result = await requestJson(
+          "/api/carti",
           {
-            method: rowIndex === "" ? "POST" : "PUT",
+            method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
           }
         );
-        reseteazaFormularul();
+      } catch (error) {
+        setStatus(`Nu s-a putut salva: ${error.message}`, true);
+        saveButton.disabled = false;
+        return;
+      }
+      form.reset();
+      try {
         await incarcaCartile();
         setStatus(`${result.message} Cod inventar: ${result.nr_inv}`);
       } catch (error) {
-        setStatus(`Nu s-a putut salva: ${error.message}`, true);
+        setStatus(`Cartea a fost salvată, dar lista nu a putut fi reîncărcată: ${error.message}`, true);
       } finally {
         saveButton.disabled = false;
       }
     });
 
-    cancelButton.addEventListener("click", reseteazaFormularul);
     generateShelvesButton.addEventListener("click", async () => {
       generateShelvesButton.disabled = true;
       downloadShelvesLink.hidden = true;
@@ -315,7 +393,9 @@
       window.location.assign("/catalog");
     });
     searchInput.addEventListener("input", renderBooks);
-    incarcaCartile();
+    incarcaCartile().catch(error => {
+      setStatus(`Nu s-au putut încărca datele: ${error.message}`, true);
+    });
   </script>
 </body>
 </html>

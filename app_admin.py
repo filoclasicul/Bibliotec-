@@ -11,6 +11,7 @@ from threading import Lock
 
 import pandas as pd
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
+from openpyxl import load_workbook
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -158,6 +159,8 @@ def text_celula(row, columns, default="-"):
         if column in row.index:
             value = row[column]
             if pd.notna(value):
+                if pd.api.types.is_number(value) and float(value).is_integer():
+                    return str(int(value))
                 text = str(value).strip()
                 return text if text else default
     return default
@@ -209,9 +212,23 @@ def valideaza_date(data):
     }
 
 
-def salveaza_df(df):
+def salveaza_rand(df, row_index, columns):
     temp_path = None
+    workbook = load_workbook(EXCEL_FILE)
     try:
+        sheet = workbook[SHEET_NAME] if SHEET_NAME in workbook.sheetnames else workbook.active
+        header_columns = {
+            cell.value: cell.column for cell in sheet[1] if cell.value is not None
+        }
+        for column in columns:
+            if column not in header_columns:
+                header_columns[column] = sheet.max_column + 1
+                sheet.cell(1, header_columns[column], column)
+            value = df.at[row_index, column]
+            if pd.isna(value):
+                value = None
+            sheet.cell(row_index + 2, header_columns[column]).value = value
+
         with tempfile.NamedTemporaryFile(
             prefix=f"{EXCEL_FILE.stem}_",
             suffix=".tmp.xlsx",
@@ -220,10 +237,11 @@ def salveaza_df(df):
         ) as temp_file:
             temp_path = Path(temp_file.name)
 
-        with pd.ExcelWriter(temp_path, engine="openpyxl", mode="w") as writer:
-            df.to_excel(writer, sheet_name=SHEET_NAME, index=False)
+        workbook.save(temp_path)
+        workbook.close()
         os.replace(temp_path, EXCEL_FILE)
     finally:
+        workbook.close()
         if temp_path and temp_path.exists():
             temp_path.unlink()
 
@@ -378,7 +396,7 @@ def adauga_carte():
             for field, value in valori.items():
                 rand_nou[coloana_camp(df, field)] = value
             df = pd.concat([df, pd.DataFrame([rand_nou])], ignore_index=True)
-            salveaza_df(df)
+            salveaza_rand(df, len(df) - 1, df.columns)
         except (FileNotFoundError, OSError, ValueError) as error:
             return raspuns_eroare(str(error), 500)
 
@@ -401,11 +419,13 @@ def editeaza_carte(row_index):
             df = incarca_df()
             if row_index < 0 or row_index >= len(df):
                 return raspuns_eroare("Cartea solicitată nu există.", 404)
+            columns = []
             for field, value in valori.items():
                 column = coloana_camp(df, field)
                 df[column] = df[column].astype("object")
                 df.at[row_index, column] = value
-            salveaza_df(df)
+                columns.append(column)
+            salveaza_rand(df, row_index, columns)
             cod = text_celula(
                 df.iloc[row_index],
                 ("Număr de Inventar", "Cod de Înregistrare"),

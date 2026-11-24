@@ -37,14 +37,6 @@
       font-size: 24px;
       color: var(--accent);
     }
-    .admin-link {
-      padding: 10px 14px;
-      border-radius: 6px;
-      color: #fff;
-      background: var(--accent);
-      text-decoration: none;
-      white-space: nowrap;
-    }
     .controls {
       display: grid;
       grid-template-columns: 2fr 1fr;
@@ -109,7 +101,6 @@
   <div class="container">
     <div class="topbar">
       <h1>Catalog Bibliotecă</h1>
-      <a class="admin-link" href="/admin">Intră ca administrator</a>
     </div>
 
     <div class="controls">
@@ -130,29 +121,6 @@
     const sectionSelect = document.getElementById("sectionSelect");
     const statsEl = document.getElementById("stats");
     const resultsEl = document.getElementById("results");
-    const adminLink = document.querySelector(".admin-link");
-    const verificareAdmin = fetch("/api/session")
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data && data.admin_available) {
-          if (data.authenticated) adminLink.textContent = "Panou administrator";
-          return true;
-        }
-        return false;
-      })
-      .catch(error => {
-        console.error("Nu pot verifica disponibilitatea administrării.", error);
-        return false;
-      });
-
-    adminLink.addEventListener("click", async event => {
-      event.preventDefault();
-      if (await verificareAdmin) {
-        window.location.assign(adminLink.href);
-      } else {
-        alert("Administrarea nu este disponibilă pe acest site static. Pornește aplicația locală și deschide http://127.0.0.1:5000 pentru a te conecta.");
-      }
-    });
 
     function normalizeaza(str) {
       return (str || "")
@@ -242,8 +210,11 @@
     const sursaDate = window.location.port === "5000" ? "/api/carti" : "data/carti.json";
 
     fetch(sursaDate)
-      .then(res => {
-        if (!res.ok) throw new Error("Nu pot încărca datele catalogului");
+      .then(async res => {
+        if (!res.ok) {
+          const detalii = (await res.text()).trim();
+          throw new Error(`Serverul a răspuns cu HTTP ${res.status}${detalii ? `: ${detalii}` : ""}`);
+        }
         return res.json();
       })
       .then(data => {
@@ -254,7 +225,7 @@
         filtreaza();
       })
       .catch(err => {
-        statsEl.textContent = `Eroare la încărcarea catalogului: ${err.message}. Pornește un server local (ex: python -m http.server) în folderul site-ului.`;
+        statsEl.textContent = `Eroare la încărcarea catalogului: ${err.message}. Pornește Porneste_Biblioteca.cmd și deschide http://127.0.0.1:5000 în locul previzualizării HTML.`;
         console.error(err);
       });
 
