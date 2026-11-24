@@ -2,6 +2,7 @@
   "name": "catalog-biblioteca",
   "private": true,
   "scripts": {
-    "build": "node scripts/build_site.cjs"
+    "build": "node scripts/build_site.cjs",
+    "deploy": "npx wrangler deploy"
   }
 }
