@@ -2,7 +2,7 @@
   "name": "catalog-biblioteca",
   "compatibility_date": "2026-11-23",
   "build": {
-    "command": "node scripts/build_site.cjs"
+    "command": "npm run build"
   },
   "assets": {
     "directory": "./public"

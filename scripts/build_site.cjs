@@ -19,5 +19,6 @@ for (const [directory, allowed] of [
 
 fs.mkdirSync(data, { recursive: true });
 fs.copyFileSync(path.join(root, "biblioteca.html"), path.join(output, "index.html"));
+fs.copyFileSync(path.join(root, "biblioteca.html"), path.join(root, "index.html"));
 fs.copyFileSync(path.join(root, "data", "carti.json"), path.join(data, "carti.json"));
-console.log("Site-ul public a fost pregătit în public/.");
+console.log("Site-ul public a fost pregătit in public/.");
